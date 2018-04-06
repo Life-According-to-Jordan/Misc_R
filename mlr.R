@@ -71,55 +71,45 @@ task.highearner <- makeClassifTask(data = income.train, target = "high.earner")
 print(task.highearner)
 
 #Set resampling strategy (here let's do 3-fold CV)
-CrossValidation <- makeResampleDesc(method = "CV", iters = 3)
+resampleStrat <- makeResampleDesc(method = "CV", iters = 3)
 
 #Tell mlr what prediction algorithm we'll be using 
 #For each algorithm, add predict.type = “response” as an additional argument to the makeLearner() function.
-predict.trees <- makeLearner("classif.rpart", predict.type = "response")
-predict.logit <- makeLearner("classif.glmnet", predict.type = "response")
-predict.nn <- makeLearner("classif.nnet", predict.type = "response")
-predict.nb <- makeLearner("classif.naiveBayes", predict.type = "response")
-predict.knn <-makeLearner("classif.knn", predict.type = "response")
-predict.svm <- makeLearner("classif.svm", predict.type = "response")
-
-#The tuning strategy (e.g. random with 10 guesses)
-#Search over penalty parameter lambda and force elastic net parameter to be 1 (LASSO)
-#modelParams <- makeParamSet(makeNumericParam("lambda",lower=0,upper=1),makeNumericParam("alpha",lower=1,upper=1))
-
-#Take 10 random guesses at lambda
-tuneMethod <- makeTuneControlRandom(maxit = 10L)
-
-#Do the tuning
-tunedModel <- tuneParams(learner = predAlg,
-                         task = task.highearner,
-                         resampling = resampleStrat,
-                         measures = rmse,      
-                         par.set = modelParams,
-                         control = tuneMethod,
-                         show.info = TRUE)
+trees <- makeLearner("classif.rpart", predict.type = "response")
+logit <- makeLearner("classif.cvglmnet", predict.type = "response")
+nn <- makeLearner("classif.nnet", predict.type = "response")
+nb <- makeLearner("classif.naiveBayes", predict.type = "response")
+knn <-makeLearner("classif.knn", predict.type = "response")
+svm <- makeLearner("classif.svm", predict.type = "response")
 
 
+#resampling
+sampleResults.tree <- resample(learner = trees, task = task.highearner, resampling = resampleStrat, measures=list(rmse))
+sampleResults.logit <- resample(learner = logit, task = task.highearner, resampling = resampleStrat, measures=list(rmse))
+sampleResults.nn <- resample(learner = nn, task = task.highearner, resampling = resampleStrat, measures=list(rmse))
+sampleResults.nb <- resample(learner = nb, task = task.highearner, resampling = resampleStrat, measures=list(rmse))
+sampleResults.knn <- resample(learner = knn, task = task.highearner, resampling = resampleStrat, measures=list(rmse))
+sampleResults.svm <- resample(learner = svm, task = task.highearner, resampling = resampleStrat, measures=list(rmse))
 
 #Question 6 
 #Setting the hyperparameters of each algorithm that will need to be cross validated
 
 #Tree model
-#minsplit, which is an integer ranging from 10 to 50 (governs minimum sample size for making a split)
-#minbucket, which is an integer ranging from 5 to 50 (governs minimum sample size in a leaf)
-#cp, which is a real number ranging from 0.001 to 0.2 (governs complexity of the tree)
-hyperparameters.tree <- 
-
-
+parameters.tree <- makeParamSet(
+  makeIntegerParam("minsplit",lower = 10, upper = 50),
+  makeIntegerParam("minbucket", lower = 5, upper = 50),
+  makeNumericParam("cp", lower = 0.001, upper = 0.2)
+)
 
 #Logit model 
 #(this is the elastic net model from last problem set, so the two parameters are λ and α. 
 #For this problem set, let λ ∈ [0, 3] and α ∈ [0, 1].
   
-logitmodelParams <- makeParamSet(makeNumericParam("lambda",lower=0,upper=3),makeNumericParam("alpha",lower=0,upper=1))
+parameters.logit <- makeParamSet(
+  makeNumericParam("lambda",lower=0,upper=3))
+  #,
+  #makeNumericParam("alpha",lower=0,upper=1))
 
-hyperparameters.logit <-
-
- 
 #Neural network model
 #size, which is an integer ranging from 1 to 10 (governs number of units in hidden layer)
 
@@ -128,18 +118,27 @@ hyperparameters.logit <-
 #maxit, which is an integer ranging from 1000 to 1000
 #(i.e. this should be fixed at 1,000 ... it governs the number of iterations the neural network takes when figuring out convergence)
 
-hyperparameters.nn <-
-
+parameters.nn <- makeParamSet(
+  makeIntegerParam("size", lower = 1, upper = 10),
+  makeIntegerParam("decay", lower = 0.1, upper = 0.5),
+  makeIntegerParam("maxit", lower = 1000, upper = 1000))
 
 #Naive Bayes
 #There’s nothing to regularize here, so you don’t need to do any cross-validation or tuning for this model
 
+###################### 
+ #NOT WORKING
+###################### 
 
 #KNN
 #k, which is an integer ranging from 1 to 30 
 #(governs the number of “neighbors” to consider)
-hyperparameters.knn <-
+parameters.knn <- makeParamSet("K", lower = 1, upper = 30)
 
+
+###################### 
+#NOT WORKING
+###################### 
 
 
 #SVM
@@ -151,41 +150,120 @@ hyperparameters.knn <-
 
 #gamma, which is also a real number in the set)
 #(governs the shape [variance] of the Gaussian kernel)
-hyperparameters.svm <- 
+parameters.svm <- makeParamSet(
+  makeDiscreteParam( kernel = "radial", values = 2^c(-2,-1, 0, 1, 2, 10)),
+  makeDiscreteParam("C", values = 2^c(-2,-1, 0, 1, 2, 10)), #cost parameters
+  makeDiscreteParam("gamma", values = 2^c(-2,-1, 0, 1, 2, 10)) #RBF Kernel Parameter
+)
 
-
-
-
-
-
+#Take 10 random guesses at lambda
+tuneMethod <- makeTuneControlRandom(maxit = 10L)
 
 #Question 7 
 #Now tune the models. Use the F1 score and the G-measure as criteria for tuning
 #(these are f1 and gmean, respectively). Remember that you don’t need to tune the Naive Bayes model.
 
+configureMlr(on.par.without.desc = "quiet")
 
-#Search over penalty parameter lambda and force elastic net parameter to be 1 (LASSO)
-modelParams <- makeParamSet(makeNumericParam("lambda",lower=0,upper=1),makeNumericParam("alpha",lower=1,upper=1))
-
-#Take 10 random guesses at lambda
-tuneMethod <- makeTuneControlRandom(maxit = 10L)
-
-#Do the tuning
-tunedModel <- tuneParams(learner = predAlg,
-                         task = theTask,
+#tuning predict.trees
+tunedModel <- tuneParams(learner = trees,
+                         task = task.highearner,
                          resampling = resampleStrat,
-                         # RMSE performance measure, this can be changed to one or many
-                         measures = rmse,      
-                         par.set = modelParams,
+                         measures = gmean,
+                         par.set = parameters.tree,
                          control = tuneMethod,
                          show.info = TRUE)
-
-
-
+#tuning predict.logit
+tunedModel <- tuneParams(learner = logit,
+                         task = task.highearner,
+                         resampling = resampleStrat,
+                         measures = gmean,      
+                         par.set = parameters.logit,
+                         control = tuneMethod,
+                         show.info = TRUE)
+#tuning predict.nn
+tunedModel <- tuneParams(learner = nn,
+                         task = task.highearner,
+                         resampling = resampleStrat,
+                         measures = gmean,      
+                         par.set = parameters.nn,
+                         control = tuneMethod,
+                         show.info = TRUE)
+#tuning predict.nb
+#??????????
+tunedModel <- tuneParams(learner = nb,
+                         task = task.highearner,
+                         resampling = resampleStrat,
+                         measures = gmean,      
+                         par.set = parameters.nb,
+                         control = tuneMethod,
+                         show.info = TRUE)
+#tuning predict.knn
+tunedModel <- tuneParams(learner = knn,
+                         task = task.highearner,
+                         resampling = resampleStrat,
+                         measures = gmean,      
+                         par.set = parameters.knn,
+                         control = tuneMethod,
+                         show.info = TRUE)
+#tuning predict.svm
+tunedModel <- tuneParams(learner = svm,
+                         task = task.highearner,
+                         resampling = resampleStrat,
+                         measures = gmean,      
+                         par.set = parameters.svm,
+                         control = tuneMethod,
+                         show.info = TRUE)
 
 #Question 8
 #Once tuned, apply the optimal tuning parameters to each of the algorithms 
 #(again, you don’t need to do this for Naive Bayes since there was no tuning done previously).
 #Then train the models, generate predictions, and assess performance.
 
+#stop! training time! 
 
+#############################################
+ # CHECK TO SEE THAT THIS ISNT A DUPLICATE
+#############################################
+
+# Apply the optimal algorithm parameters to the model
+pred.tree <- setHyperPars(learner=trees, par.vals = parameters.tree)
+pred.logit <- setHyperPars(learner=logit, par.vals = parameters.logit)
+pred.nn <- setHyperPars(learner=nn, par.vals = parameters.nn)
+pred.knn <- setHyperPars(learner=knn, par.vals = parameters.knn)
+#pred.nb <- setHyperPars(learner=nb, par.vals = )
+pred.svm <- setHyperPars(learner=svm, par.vals = parameters.svm)
+
+# Verify performance on cross validated sample sets
+resample(pred.tree, task.highearner, resampleStrat, measures=gmean)
+resample(pred.logit, task.highearner, resampleStrat, measures=list(rmse))
+resample(pred.nn, task.highearner, resampleStrat, measures=list(rmse))
+resample(pred.knn, task.highearner, resampleStrat, measures=list(rmse))
+#resample(pred.nb, task.highearner, resampleStrat, measures=list(rmse))
+resample(pred.svm, task.highearner, resampleStrat, measures=list(rmse))
+
+# Train the final model for each algorithm
+finalModel.tree <- train(learner = pred.tree, task = task.highearner)
+finalModel.logit <- train(learner = pred.logit, task = task.highearner)
+finalModel.nn <- train(learner = pred.nn, task = task.highearner)
+finalModel.knn <- train(learner = pred.knn, task = task.highearner)
+#finalModel2 <- train(learner = pred.nb, task = task.highearner)
+finalModel.svm <- train(learner = pred.svm, task = task.highearner)
+
+finalModel$learner.model
+
+# Predict in test set for each algorithm
+prediction.test.tree <- predict(finalModel.tree, newdata = income.test)
+prediction.test.logit <- predict(finalModel.logit, newdata = income.test)
+prediction.test.nn <- predict(finalModel.nn, newdata = income.test)
+prediction.test.knn <- predict(finalModel.knn, newdata = income.test)
+#prediction5 <- predict(finalModel5, newdata = income.test)
+prediction.test.svm <- predict(finalModel.svm, newdata = income.test)
+
+# Out of sample RMSE for each algorithm
+performance(prediction.test.tree, measures = list(rmse))
+performance(prediction.test.logit, measures = list(rmse))
+performance(prediction.test.nn, measures = list(rmse))
+performance(prediction.test.knn, measures = list(rmse))
+#performance(prediction5, measures = list(rmse))
+performance(prediction.test.svm, measures = list(rmse))
